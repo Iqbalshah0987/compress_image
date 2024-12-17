@@ -1,6 +1,5 @@
-const requiredModules = ['fs', 'path', 'sharp'];
-
-// Check if required modules are installed
+// #########################################################################
+const requiredModules = ['sharp'];
 const missingModules = requiredModules.filter(module => {
   try {
     require.resolve(module);
@@ -10,11 +9,9 @@ const missingModules = requiredModules.filter(module => {
   }
 });
 
-// Install missing modules using npm if any
 if (missingModules.length > 0) {
   const { execSync } = require('child_process');
   console.log(`Installing missing modules: ${missingModules.join(', ')}`);
-
   try {
     execSync(`npm install ${missingModules.join(' ')}`);
     console.log('Modules installed successfully.');
@@ -23,79 +20,29 @@ if (missingModules.length > 0) {
     process.exit(1);
   }
 }
+// #########################################################################
 
-// Continue with the rest of the script
 const fs = require('fs');
 const path = require('path');
-const sharp = require('sharp');
+const {processImage} = require('./utils/processImageToWebp');
 
-// Specify the input and output directories
+// Parse arguments
 const inputDirectory = process.argv[2];
 const outputDirectory = process.argv[3];
 const file = process.argv[4];
+const targetSize = (process.argv[5] || 120) * 1024; // Default target size is 120 KB
 
-// Create the output directory if it doesn't exist
-if (!fs.existsSync(outputDirectory)) {
-  fs.mkdirSync(outputDirectory);
+if (!inputDirectory || !outputDirectory || !file) {
+  console.error('Usage: node script.js <inputDirectory> <outputDirectory> <file> [targetSizeInKB]');
+  process.exit(1);
 }
 
-// Check if the file is an image
-const isImage = async (filePath) => {
-  try {
-    const metadata = await sharp(filePath).metadata();
-    return metadata.format !== undefined;
-  } catch (error) {
-    return false;
-  }
-};
-console.log(path.join(inputDirectory, file));
-// Process the file if it's an image
-const processImage = async () => {
-  if (await isImage(path.join(inputDirectory, file))) {
-    const inputPath = path.join(inputDirectory, file);
-    const outputFileName = path.parse(file).name + '.webp';
-    const outputPath = path.join(outputDirectory, outputFileName);
+const inputFilePath = path.join(inputDirectory, file);
+const outputFileName = path.parse(file).name + '.webp';
+const outputFilePath = path.join(outputDirectory, outputFileName);
 
-    try {
-      const inputFileSize = fs.statSync(inputPath).size;
-      let compressionQuality = 95;  // Start with high quality
-      const targetSize = 120 * 1024;  // Target 100 KB file size
+if (!fs.existsSync(outputDirectory)) {
+  fs.mkdirSync(outputDirectory, { recursive: true });
+}
 
-      // Adjust quality in small steps until the file size is close to target
-      let outputFileSize;
-      do {
-        await sharp(inputPath)
-          .webp({ quality: compressionQuality })
-          .toFile(outputPath);
-
-        outputFileSize = fs.statSync(outputPath).size;
-        if (outputFileSize > targetSize) {
-          compressionQuality = Math.max(compressionQuality - 2, 70);  // Don't go below 70 to preserve quality
-        }
-      } while (outputFileSize > targetSize && compressionQuality > 70);
-      
-        console.log(`Image Compressed`);
-
-    } catch (error) {
-      console.error(`Error processing ${file}: ${error.message}`);
-      fs.copyFile(path.join(inputDirectory, file), path.join(outputDirectory, file), (err) => {
-        if (err) {
-          console.error(`Error copying file on file - ${file} : err`);
-          return;
-        }
-        console.log('File copied. Image Compressed');
-      });
-    }
-  } else {
-    console.log("File is not an image, skipping compression and conversion.");
-     fs.copyFile(path.join(inputDirectory, file), path.join(outputDirectory, file), (err) => {
-        if (err) {
-          console.error(`Error copying file on file - ${file} : err`);
-          return;
-        }
-        console.log('File copied. Image Compressed');
-      });
-  }
-};
-
-processImage();
+processImage({inputFilePath, outputFilePath, file, targetSize});
